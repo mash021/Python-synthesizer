@@ -1,0 +1,94 @@
+Metadata-Version: 2.1
+Name: sawtooth
+Version: 0.1.0rc25.post1
+Summary: Sample Python Project for creating a new Python Module
+Author-email: Curtis Maddalozzo <curtis@maddalozzo.ca>
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Requires-Dist: bandit[toml]==1.7.4 ; extra == "test"
+Requires-Dist: black==22.* ; extra == "test"
+Requires-Dist: check-manifest==0.48 ; extra == "test"
+Requires-Dist: flake8-bugbear==22.10.27 ; extra == "test"
+Requires-Dist: flake8-docstrings ; extra == "test"
+Requires-Dist: flake8-formatter_junit_xml ; extra == "test"
+Requires-Dist: flake8==5.* ; extra == "test"
+Requires-Dist: pre-commit==2.20.0 ; extra == "test"
+Requires-Dist: pylint==2.15.6 ; extra == "test"
+Requires-Dist: pylint_junit ; extra == "test"
+Requires-Dist: pytest-cov==4.0.0 ; extra == "test"
+Requires-Dist: pytest-mock<3.10.1 ; extra == "test"
+Requires-Dist: pytest-runner ; extra == "test"
+Requires-Dist: pytest==7.2.0 ; extra == "test"
+Requires-Dist: pytest-asyncio==0.18.3 ; extra == "test"
+Requires-Dist: pytest-github-actions-annotate-failures ; extra == "test"
+Requires-Dist: shellcheck-py==0.8.0.4 ; extra == "test"
+Project-URL: Documentation, https://github.com/cmaddalozzo/sawtooth/tree/main#readme
+Project-URL: Source, https://github.com/cmaddalozzo/sawtooth
+Project-URL: Tracker, https://github.com/cmaddalozzo/sawtooth/issues
+Provides-Extra: test
+
+# Sawtooth 🪚
+
+Sawtooth is a utility for congestion control using additive increase and multiplicative backoff. The algorithm is based on [this blog post](https://www.aeoncase.com/blog/posts/improve-on-exponential-backoff/).
+
+![Sawtooth graph](sawtooth.png)
+
+## Getting started
+
+```
+pip install sawtooth
+```
+
+### Basic usage
+
+```python
+from sawtooth import Sawtooth, SawtoothBackpressure
+import asyncio
+from aiohttp import ClientSession 
+from aiohttp.web_exceptions import HTTPTooManyRequests
+
+async def main():
+    session = ClientSession()
+    sawtooth = Sawtooth(session)
+
+    with open('urls.txt') as f:
+        urls = f.readlines()
+    
+    async def get_url(url: str):
+        async with sawtooth.resource() as s:
+            res = await s.get(url)
+            # Raise backpressure on 429
+            if res.status == HTTPTooManyRequests.status_code:
+                raise SawtoothBackpressure()
+
+    await asyncio.gather(*[get_url(url) for url in urls])
+
+    await session.close()
+```
+
+## Configuration
+
+A `Sawtooth` instance can be configured by passing an instance of `SawtoothConfig` as its second parameter.
+
+```python
+sawtooth = Sawtooth(resource, SawtoothConfig(max_concurrency=100, min_concurrency=50))
+```
+
+The following options are available:
+
+| Name                         | Description                                                                                                                           |    Default    |
+| -------------                | -------------                                                                                                                         | ------------- |
+| *max_concurrency*            | The maximum value we can increase concurrency to                                                                                      |   **1000**    |
+| *min_concurrency*            | The minimum value we can reduce concurrency to                                                                                        |     **1**     |
+| *step_size*                  | The amount to increase concurrency by on a successful response                                                                        |     **1**     |
+| *backoff_factor*             | Reduce concurrency to `concurrency * backoff_factor` upon receiving backpressure                                                     |   **0.95**    |
+| *starting_concurrency*       | Starting concurrency.                                                             |   **(max_concurrency - min_concurrency) / 2**    |
+
